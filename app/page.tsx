@@ -408,7 +408,8 @@ export default function Home() {
           const pv = satelliteModule.propagate(satrec, date);
           if (!pv.position) continue;
           const gmst = satelliteModule.gstime(date);
-          const geodetic = satelliteModule.eciToGeodetic(pv.position, gmst);
+          const positionEci = pv.position as import("satellite.js").EciVec3<number>;
+          const geodetic = satelliteModule.eciToGeodetic(positionEci, gmst);
           const lat = deg(geodetic.latitude);
           const lon = normalizeLon(deg(geodetic.longitude));
           points.push([lat, lon]);
