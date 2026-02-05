@@ -319,9 +319,9 @@ export default function Home() {
         const satelliteModule = await import("satellite.js");
         const satrec = satelliteModule.twoline2satrec(tle[0], tle[1]);
         satrecRef.current = satrec;
-        const observer = {
-          lat: rad(passLocation.lat),
-          lon: rad(passLocation.lon),
+        const observer: import("satellite.js").GeodeticLocation = {
+          latitude: rad(passLocation.lat),
+          longitude: rad(passLocation.lon),
           height: 0,
         };
         const now = Date.now();
