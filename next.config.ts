@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
               "script-src 'self' 'unsafe-inline'; " +
               "style-src 'self' 'unsafe-inline'; " +
               "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org; " +
-              "connect-src 'self' https://api.wheretheiss.at; " +
+              "connect-src 'self' https://api.wheretheiss.at https://celestrak.org; " +
               "worker-src 'self' blob:; " +
               "font-src 'self' data:; ",
           },

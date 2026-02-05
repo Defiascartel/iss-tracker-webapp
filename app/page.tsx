@@ -11,11 +11,75 @@ type IssData = {
 };
 
 const ISS_URL = "https://api.wheretheiss.at/v1/satellites/25544";
+const TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE";
 const REFRESH_MS = 5000;
 const TRAIL_MAX_POINTS = 200;
 const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const PASS_MAX = 5;
+const PASS_LOOKAHEAD_HOURS = 24;
+const PASS_STEP_SECONDS = 60;
+const MIN_ELEVATION_DEG = 10;
+const ORBIT_LOOKAHEAD_MINUTES = 90;
+const ORBIT_STEP_SECONDS = 60;
+
+type PassInfo = {
+  start: Date;
+  end: Date;
+  durationSec: number;
+  maxElevationDeg: number;
+};
+
+const toJulian = (date: Date) => date.getTime() / 86400000 + 2440587.5;
+const toDays = (date: Date) => toJulian(date) - 2451545.0;
+const rad = (deg: number) => (deg * Math.PI) / 180;
+const deg = (radVal: number) => (radVal * 180) / Math.PI;
+const normalizeLon = (lon: number) => {
+  let result = ((lon + 180) % 360 + 360) % 360 - 180;
+  if (result === -180) result = 180;
+  return result;
+};
+
+const getSubsolarPoint = (date: Date) => {
+  const d = toDays(date);
+  const M = rad(357.5291 + 0.98560028 * d);
+  const C = rad(
+    1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M)
+  );
+  const L = rad(280.4665 + 0.98564736 * d) + C;
+  const e = rad(23.4397);
+  const decl = Math.asin(Math.sin(e) * Math.sin(L));
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
+  const theta = rad(280.16 + 360.9856235 * d);
+  const gha = theta - ra;
+  const subsolarLat = deg(decl);
+  const subsolarLon = normalizeLon(-deg(gha));
+  return { lat: subsolarLat, lon: subsolarLon };
+};
+
+const computeDayBoundary = (date: Date) => {
+  const { lat: lat0, lon: lon0 } = getSubsolarPoint(date);
+  const lat1 = rad(lat0);
+  const lon1 = rad(lon0);
+  const distance = Math.PI / 2;
+  const ring: [number, number][] = [];
+  for (let bearing = 0; bearing <= 360; bearing += 2) {
+    const brng = rad(bearing);
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(distance) +
+        Math.cos(lat1) * Math.sin(distance) * Math.cos(brng)
+    );
+    const lon2 =
+      lon1 +
+      Math.atan2(
+        Math.sin(brng) * Math.sin(distance) * Math.cos(lat1),
+        Math.cos(distance) - Math.sin(lat1) * Math.sin(lat2)
+      );
+    ring.push([deg(lat2), normalizeLon(deg(lon2))]);
+  }
+  return ring;
+};
 
 export default function Home() {
   const [data, setData] = useState<IssData | null>(null);
@@ -24,11 +88,27 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(true);
   const [followIss, setFollowIss] = useState(true);
+  const [tle, setTle] = useState<[string, string] | null>(null);
+  const [tleError, setTleError] = useState<string | null>(null);
+  const [passes, setPasses] = useState<PassInfo[] | null>(null);
+  const [passError, setPassError] = useState<string | null>(null);
+  const [passLoading, setPassLoading] = useState(false);
+  const [manualLat, setManualLat] = useState("");
+  const [manualLon, setManualLon] = useState("");
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
+  const [passLocation, setPassLocation] = useState<{ lat: number; lon: number } | null>(
+    null
+  );
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
   const trailLineRef = useRef<import("leaflet").Polyline | null>(null);
+  const orbitLineRef = useRef<import("leaflet").Polyline | null>(null);
+  const nightLayerRef = useRef<import("leaflet").Polygon | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  const satrecRef = useRef<ReturnType<typeof import("satellite.js")["twoline2satrec"]> | null>(
+    null
+  );
   const trailRef = useRef<[number, number][]>([]);
   const latestDataRef = useRef<IssData | null>(null);
   const hasCenteredRef = useRef(false);
@@ -73,7 +153,7 @@ export default function Home() {
 
     if (!trailLineRef.current) {
       trailLineRef.current = L.polyline(trailLatLngs, {
-        color: "rgba(14, 165, 233, 0.9)",
+        color: "rgba(248, 113, 113, 0.95)",
         weight: 2.5,
       }).addTo(map);
     } else {
@@ -90,6 +170,44 @@ export default function Home() {
       duration: 0.8,
     });
     setFollowIss(true);
+  };
+
+  const handleUseLocation = () => {
+    setPassError(null);
+    if (!navigator.geolocation) {
+      setPassError("Geolocation not supported in this browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        setPassLocation({ lat, lon });
+        setLocationLabel("Posizione attuale");
+        setManualLat(lat.toFixed(4));
+        setManualLon(lon.toFixed(4));
+      },
+      (err) => {
+        setPassError(err.message);
+      },
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 10000 }
+    );
+  };
+
+  const handleManualLocation = () => {
+    setPassError(null);
+    const lat = Number(manualLat);
+    const lon = Number(manualLon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setPassError("Inserisci coordinate valide.");
+      return;
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      setPassError("Coordinate fuori intervallo.");
+      return;
+    }
+    setPassLocation({ lat, lon });
+    setLocationLabel("Coordinate manuali");
   };
 
   useEffect(() => {
@@ -138,6 +256,50 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    let tleInterval: ReturnType<typeof setInterval> | null = null;
+
+    const fetchTle = async () => {
+      try {
+        if (active) setTleError(null);
+        const response = await fetch(TLE_URL, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`TLE request failed with ${response.status}`);
+        }
+        const text = await response.text();
+        const lines = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        let line1 = "";
+        let line2 = "";
+        if (lines.length >= 2 && lines[0].startsWith("1 ")) {
+          line1 = lines[0];
+          line2 = lines[1];
+        } else if (lines.length >= 3) {
+          line1 = lines[1];
+          line2 = lines[2];
+        }
+        if (!line1 || !line2) {
+          throw new Error("TLE format not recognized");
+        }
+        if (active) setTle([line1, line2]);
+      } catch (err) {
+        if (!active) return;
+        setTleError(err instanceof Error ? err.message : "Unknown TLE error");
+      }
+    };
+
+    void fetchTle();
+    tleInterval = setInterval(fetchTle, 6 * 60 * 60 * 1000);
+
+    return () => {
+      active = false;
+      if (tleInterval) clearInterval(tleInterval);
+    };
+  }, []);
+
+  useEffect(() => {
     latestDataRef.current = data;
     updateMapFromData();
   }, [data]);
@@ -147,7 +309,143 @@ export default function Home() {
   }, [followIss]);
 
   useEffect(() => {
+    if (!passLocation || !tle) return;
     let active = true;
+
+    const computePasses = async () => {
+      setPassLoading(true);
+      setPassError(null);
+      try {
+        const satelliteModule = await import("satellite.js");
+        const satrec = satelliteModule.twoline2satrec(tle[0], tle[1]);
+        satrecRef.current = satrec;
+        const observer: import("satellite.js").GeodeticLocation = {
+          latitude: rad(passLocation.lat),
+          longitude: rad(passLocation.lon),
+          height: 0,
+        };
+        const now = Date.now();
+        const end = now + PASS_LOOKAHEAD_HOURS * 60 * 60 * 1000;
+        const results: PassInfo[] = [];
+        let inPass = false;
+        let passStart: Date | null = null;
+        let maxElevation = -90;
+
+        for (let t = now; t <= end; t += PASS_STEP_SECONDS * 1000) {
+          const date = new Date(t);
+          const positionAndVelocity = satelliteModule.propagate(satrec, date);
+          if (!positionAndVelocity.position) continue;
+          const gmst = satelliteModule.gstime(date);
+          const positionEci = positionAndVelocity.position as import("satellite.js").EciVec3<number>;
+          const positionEcf = satelliteModule.eciToEcf(positionEci, gmst);
+          const lookAngles = satelliteModule.ecfToLookAngles(observer, positionEcf);
+          const elevationDeg = deg(lookAngles.elevation);
+
+          if (elevationDeg >= MIN_ELEVATION_DEG) {
+            if (!inPass) {
+              inPass = true;
+              passStart = date;
+              maxElevation = elevationDeg;
+            } else if (elevationDeg > maxElevation) {
+              maxElevation = elevationDeg;
+            }
+          } else if (inPass && passStart) {
+            const passEnd = date;
+            results.push({
+              start: passStart,
+              end: passEnd,
+              durationSec: Math.round(
+                (passEnd.getTime() - passStart.getTime()) / 1000
+              ),
+              maxElevationDeg: Number(maxElevation.toFixed(1)),
+            });
+            if (results.length >= PASS_MAX) break;
+            inPass = false;
+            passStart = null;
+            maxElevation = -90;
+          }
+        }
+
+        if (active) setPasses(results);
+      } catch (err) {
+        if (!active) return;
+        setPassError(err instanceof Error ? err.message : "Pass computation failed");
+      } finally {
+        if (active) setPassLoading(false);
+      }
+    };
+
+    void computePasses();
+
+    return () => {
+      active = false;
+    };
+  }, [passLocation, tle]);
+
+  useEffect(() => {
+    if (!tle) return;
+    let active = true;
+    let orbitInterval: ReturnType<typeof setInterval> | null = null;
+
+    const computeOrbit = async () => {
+      const map = mapRef.current;
+      const L = leafletRef.current;
+      if (!map || !L) return;
+      try {
+        const satelliteModule = await import("satellite.js");
+        const satrec =
+          satrecRef.current ?? satelliteModule.twoline2satrec(tle[0], tle[1]);
+        satrecRef.current = satrec;
+
+        const now = Date.now();
+        const points: import("leaflet").LatLngTuple[] = [];
+        for (
+          let t = now;
+          t <= now + ORBIT_LOOKAHEAD_MINUTES * 60 * 1000;
+          t += ORBIT_STEP_SECONDS * 1000
+        ) {
+          const date = new Date(t);
+          const pv = satelliteModule.propagate(satrec, date);
+          if (!pv.position) continue;
+          const gmst = satelliteModule.gstime(date);
+          const positionEci = pv.position as import("satellite.js").EciVec3<number>;
+          const geodetic = satelliteModule.eciToGeodetic(positionEci, gmst);
+          const lat = deg(geodetic.latitude);
+          const lon = normalizeLon(deg(geodetic.longitude));
+          points.push([lat, lon]);
+        }
+
+        if (!active || points.length === 0) return;
+        if (!orbitLineRef.current) {
+          orbitLineRef.current = L.polyline(points, {
+            color: "rgba(34, 197, 94, 0.9)",
+            weight: 2,
+            dashArray: "6 6",
+          }).addTo(map);
+        } else {
+          orbitLineRef.current.setLatLngs(points);
+        }
+      } catch (err) {
+        if (!active) return;
+      }
+    };
+
+    void computeOrbit();
+    orbitInterval = setInterval(computeOrbit, 10 * 60 * 1000);
+
+    return () => {
+      active = false;
+      if (orbitInterval) clearInterval(orbitInterval);
+      if (orbitLineRef.current) {
+        orbitLineRef.current.remove();
+        orbitLineRef.current = null;
+      }
+    };
+  }, [tle]);
+
+  useEffect(() => {
+    let active = true;
+    let nightInterval: ReturnType<typeof setInterval> | null = null;
 
     const initMap = async () => {
       if (!mapContainerRef.current || mapRef.current) return;
@@ -177,6 +475,34 @@ export default function Home() {
       map.on("zoomstart", () => setFollowIss(false));
 
       mapRef.current = map;
+      const updateNightLayer = () => {
+        const L = leafletRef.current;
+        const currentMap = mapRef.current;
+        if (!L || !currentMap) return;
+        const dayBoundary = computeDayBoundary(new Date());
+        const world: [number, number][] = [
+          [-90, -180],
+          [-90, 180],
+          [90, 180],
+          [90, -180],
+        ];
+        const polygonLatLngs = [world, dayBoundary];
+        if (!nightLayerRef.current) {
+          nightLayerRef.current = L.polygon(polygonLatLngs, {
+            stroke: false,
+            fillColor: "rgba(2, 6, 23, 0.55)",
+            fillOpacity: 0.55,
+            interactive: false,
+          }).addTo(currentMap);
+        } else {
+          nightLayerRef.current.setLatLngs(
+            polygonLatLngs as unknown as import("leaflet").LatLngExpression[][]
+          );
+        }
+      };
+
+      updateNightLayer();
+      nightInterval = setInterval(updateNightLayer, 5 * 60 * 1000);
       updateMapFromData();
     };
 
@@ -184,12 +510,15 @@ export default function Home() {
 
     return () => {
       active = false;
+      if (nightInterval) clearInterval(nightInterval);
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
       markerRef.current = null;
       trailLineRef.current = null;
+      orbitLineRef.current = null;
+      nightLayerRef.current = null;
     };
   }, []);
 
@@ -198,7 +527,7 @@ export default function Home() {
       <div ref={mapContainerRef} className="absolute inset-0 z-0" />
       <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.18),_transparent_55%),radial-gradient(circle_at_20%_20%,_rgba(236,72,153,0.22),_transparent_50%)]" />
 
-      <main className="relative z-20 flex h-full w-full items-end justify-center px-6 pb-6 pt-20">
+      <main className="pointer-events-none relative z-20 flex h-full w-full items-end justify-center px-6 pb-6 pt-20">
         {infoOpen ? (
           <section className="pointer-events-auto w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-900/60 bg-slate-950/75 p-6 shadow-[0_30px_80px_-50px_rgba(2,6,23,0.95)] backdrop-blur-2xl sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -294,6 +623,96 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            <div className="mt-6 rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
+                Prossimi passaggi ISS
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleUseLocation}
+                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
+                >
+                  Usa posizione
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Lat"
+                    value={manualLat}
+                    onChange={(event) => setManualLat(event.target.value)}
+                    className="w-24 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-100/90 outline-none transition focus:border-cyan-300/70"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Lon"
+                    value={manualLon}
+                    onChange={(event) => setManualLon(event.target.value)}
+                    className="w-24 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-100/90 outline-none transition focus:border-cyan-300/70"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualLocation}
+                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
+                  >
+                    Calcola
+                  </button>
+                </div>
+              </div>
+
+              {locationLabel && (
+                <p className="mt-3 text-xs text-slate-300/80">
+                  Posizione: {locationLabel}
+                </p>
+              )}
+              {tleError && (
+                <p className="mt-3 text-xs text-rose-200">
+                  TLE error: {tleError}
+                </p>
+              )}
+              {passError && (
+                <p className="mt-3 text-xs text-rose-200">
+                  {passError}
+                </p>
+              )}
+              {passLoading && (
+                <p className="mt-3 text-xs text-slate-300/80">
+                  Calcolo passaggi in corso…
+                </p>
+              )}
+              {!passLoading && passes && passes.length > 0 && (
+                <ul className="mt-3 space-y-2 text-xs text-slate-200">
+                  {passes.map((pass) => (
+                    <li key={pass.start.toISOString()} className="flex flex-wrap gap-2">
+                      <span>
+                        {pass.start.toLocaleTimeString()} →{" "}
+                        {pass.end.toLocaleTimeString()}
+                      </span>
+                      <span className="text-slate-400">
+                        {Math.round(pass.durationSec / 60)} min
+                      </span>
+                      <span className="text-cyan-200">
+                        max {pass.maxElevationDeg}°
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!passLoading && passes && passes.length === 0 && (
+                <p className="mt-3 text-xs text-slate-300/80">
+                  Nessun passaggio sopra {MIN_ELEVATION_DEG}° nelle prossime{" "}
+                  {PASS_LOOKAHEAD_HOURS} ore.
+                </p>
+              )}
+              {!passLoading && !passes && (
+                <p className="mt-3 text-xs text-slate-300/60">
+                  Seleziona una posizione per calcolare i passaggi.
+                </p>
+              )}
+            </div>
 
             <div className="mt-6 flex flex-col gap-2 text-xs text-slate-300/70 sm:flex-row sm:items-center sm:justify-between">
               <span>Last updated: {lastUpdated ?? "--"}</span>
