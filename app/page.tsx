@@ -144,13 +144,12 @@ export default function Home() {
     const initMap = async () => {
       if (!mapContainerRef.current || mapRef.current) return;
 
-      if (!(maplibregl as typeof maplibregl & { workerClass?: unknown }).workerClass) {
+      if (!(maplibregl as any).workerClass) {
         const { default: MapLibreWorker } = await import(
           "maplibre-gl/dist/maplibre-gl-csp-worker"
         );
         if (!cancelled) {
-          (maplibregl as typeof maplibregl & { workerClass?: unknown }).workerClass =
-            MapLibreWorker;
+          (maplibregl as any).workerClass = MapLibreWorker;
         }
       }
 
