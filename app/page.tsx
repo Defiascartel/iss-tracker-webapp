@@ -1,6 +1,5 @@
 "use client";
 
-import L from "leaflet";
 import { useEffect, useRef, useState } from "react";
 
 type IssData = {
@@ -26,9 +25,10 @@ export default function Home() {
   const [infoOpen, setInfoOpen] = useState(true);
   const [followIss, setFollowIss] = useState(true);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.CircleMarker | null>(null);
-  const trailLineRef = useRef<L.Polyline | null>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
+  const trailLineRef = useRef<import("leaflet").Polyline | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const trailRef = useRef<[number, number][]>([]);
   const latestDataRef = useRef<IssData | null>(null);
   const hasCenteredRef = useRef(false);
@@ -36,13 +36,17 @@ export default function Home() {
 
   const updateMapFromData = () => {
     const map = mapRef.current;
+    const L = leafletRef.current;
     const latest = latestDataRef.current;
-    if (!map || !latest) return;
+    if (!map || !latest || !L) return;
 
     const current: [number, number] = [latest.longitude, latest.latitude];
     trailRef.current = [...trailRef.current, current].slice(-TRAIL_MAX_POINTS);
 
-    const latlng: L.LatLngExpression = [latest.latitude, latest.longitude];
+    const latlng: import("leaflet").LatLngExpression = [
+      latest.latitude,
+      latest.longitude,
+    ];
 
     if (!hasCenteredRef.current) {
       map.setView(latlng, 2.6);
@@ -63,10 +67,9 @@ export default function Home() {
       markerRef.current.setLatLng(latlng);
     }
 
-    const trailLatLngs: L.LatLngTuple[] = trailRef.current.map(([lng, lat]) => [
-      lat,
-      lng,
-    ]);
+    const trailLatLngs: import("leaflet").LatLngTuple[] = trailRef.current.map(
+      ([lng, lat]) => [lat, lng]
+    );
 
     if (!trailLineRef.current) {
       trailLineRef.current = L.polyline(trailLatLngs, {
@@ -144,31 +147,48 @@ export default function Home() {
   }, [followIss]);
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    let active = true;
 
-    const map = L.map(mapContainerRef.current, {
-      zoomControl: false,
-      minZoom: 1,
-      maxZoom: 12,
-    }).setView([0, 0], 1.6);
+    const initMap = async () => {
+      if (!mapContainerRef.current || mapRef.current) return;
 
-    L.tileLayer(OSM_TILES, {
-      attribution: OSM_ATTRIBUTION,
-      maxZoom: 19,
-      crossOrigin: true,
-    }).addTo(map);
+      const leafletModule = await import("leaflet");
+      const L =
+        (leafletModule as { default?: typeof leafletModule }).default ??
+        leafletModule;
+      if (!active) return;
+      leafletRef.current = L;
 
-    L.control.zoom({ position: "topright" }).addTo(map);
+      if (!mapContainerRef.current || mapRef.current) return;
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: false,
+        minZoom: 1,
+        maxZoom: 12,
+      }).setView([0, 0], 1.6);
 
-    map.on("dragstart", () => setFollowIss(false));
-    map.on("zoomstart", () => setFollowIss(false));
+      L.tileLayer(OSM_TILES, {
+        attribution: OSM_ATTRIBUTION,
+        maxZoom: 19,
+        crossOrigin: true,
+      }).addTo(map);
 
-    mapRef.current = map;
-    updateMapFromData();
+      L.control.zoom({ position: "topright" }).addTo(map);
+
+      map.on("dragstart", () => setFollowIss(false));
+      map.on("zoomstart", () => setFollowIss(false));
+
+      mapRef.current = map;
+      updateMapFromData();
+    };
+
+    void initMap();
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      active = false;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
       markerRef.current = null;
       trailLineRef.current = null;
     };
