@@ -20,6 +20,7 @@ export default function Home() {
   const [data, setData] = useState<IssData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(true);
   const [followIss, setFollowIss] = useState(true);
@@ -170,11 +171,18 @@ export default function Home() {
     map.on("dragstart", () => setFollowIss(false));
     map.on("zoomstart", () => setFollowIss(false));
 
-    map.on("load", () => {
-      if (!map.getSource("iss-point")) {
-        map.addSource("iss-point", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
+      map.on("error", (event) => {
+        const message =
+          event.error instanceof Error ? event.error.message : "Map failed to load";
+        setMapError(message);
+      });
+
+      map.on("load", () => {
+        map.resize();
+        if (!map.getSource("iss-point")) {
+          map.addSource("iss-point", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
         });
       }
 
@@ -307,6 +315,11 @@ export default function Home() {
             {error && !loading && (
               <div className="mt-6 rounded-2xl border border-rose-500/40 bg-rose-500/15 p-5 text-rose-200 shadow-[inset_0_0_35px_rgba(244,63,94,0.2)]">
                 Unable to load ISS data: {error}
+              </div>
+            )}
+            {mapError && (
+              <div className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-amber-100/90 shadow-[inset_0_0_35px_rgba(251,191,36,0.18)]">
+                Map error: {mapError}
               </div>
             )}
 
