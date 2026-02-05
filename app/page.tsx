@@ -106,7 +106,7 @@ export default function Home() {
   const orbitLineRef = useRef<import("leaflet").Polyline | null>(null);
   const nightLayerRef = useRef<import("leaflet").Polygon | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
-  const satrecRef = useRef<ReturnType<import("satellite.js")["twoline2satrec"]> | null>(
+  const satrecRef = useRef<ReturnType<typeof import("satellite.js")["twoline2satrec"]> | null>(
     null
   );
   const trailRef = useRef<[number, number][]>([]);
