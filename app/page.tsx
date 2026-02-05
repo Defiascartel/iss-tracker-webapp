@@ -153,9 +153,8 @@ export default function Home() {
       if (!mapContainerRef.current || mapRef.current) return;
 
       const leafletModule = await import("leaflet");
-      const L =
-        (leafletModule as { default?: typeof leafletModule }).default ??
-        leafletModule;
+      const L = (leafletModule as unknown as { default?: typeof leafletModule }).default
+        ?? leafletModule;
       if (!active) return;
       leafletRef.current = L;
 
