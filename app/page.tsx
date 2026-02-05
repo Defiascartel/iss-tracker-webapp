@@ -319,11 +319,11 @@ export default function Home() {
         const satelliteModule = await import("satellite.js");
         const satrec = satelliteModule.twoline2satrec(tle[0], tle[1]);
         satrecRef.current = satrec;
-        const observer: import("satellite.js").GeodeticLocation = {
+        const observer = {
           latitude: rad(passLocation.lat),
           longitude: rad(passLocation.lon),
           height: 0,
-        };
+        } as import("satellite.js").GeodeticLocation;
         const now = Date.now();
         const end = now + PASS_LOOKAHEAD_HOURS * 60 * 60 * 1000;
         const results: PassInfo[] = [];
@@ -338,7 +338,10 @@ export default function Home() {
           const gmst = satelliteModule.gstime(date);
           const positionEci = positionAndVelocity.position as import("satellite.js").EciVec3<number>;
           const positionEcf = satelliteModule.eciToEcf(positionEci, gmst);
-          const lookAngles = satelliteModule.ecfToLookAngles(observer, positionEcf);
+          const lookAngles = satelliteModule.ecfToLookAngles(
+            observer,
+            positionEcf
+          );
           const elevationDeg = deg(lookAngles.elevation);
 
           if (elevationDeg >= MIN_ELEVATION_DEG) {
