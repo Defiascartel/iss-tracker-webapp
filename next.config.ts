@@ -10,10 +10,10 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value:
               "default-src 'self'; " +
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'; " +
-              "style-src 'self' 'unsafe-inline' https://basemaps.cartocdn.com; " +
-              "img-src 'self' data: blob: https://*.cartocdn.com https://*.openstreetmap.org; " +
-              "connect-src 'self' https://api.wheretheiss.at https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com; " +
+              "script-src 'self' 'unsafe-inline'; " +
+              "style-src 'self' 'unsafe-inline'; " +
+              "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org; " +
+              "connect-src 'self' https://api.wheretheiss.at; " +
               "worker-src 'self' blob:; " +
               "font-src 'self' data:; ",
           },
