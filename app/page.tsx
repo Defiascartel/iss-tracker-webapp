@@ -336,10 +336,8 @@ export default function Home() {
           const positionAndVelocity = satelliteModule.propagate(satrec, date);
           if (!positionAndVelocity.position) continue;
           const gmst = satelliteModule.gstime(date);
-          const positionEcf = satelliteModule.eciToEcf(
-            positionAndVelocity.position,
-            gmst
-          );
+          const positionEci = positionAndVelocity.position as import("satellite.js").EciVec3<number>;
+          const positionEcf = satelliteModule.eciToEcf(positionEci, gmst);
           const lookAngles = satelliteModule.ecfToLookAngles(observer, positionEcf);
           const elevationDeg = deg(lookAngles.elevation);
 
