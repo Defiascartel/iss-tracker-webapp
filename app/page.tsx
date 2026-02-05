@@ -221,6 +221,7 @@ export default function Home() {
 
     return () => {
       map.remove();
+      mapRef.current = null;
     };
   }, []);
 
