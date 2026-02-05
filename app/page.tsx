@@ -195,10 +195,10 @@ export default function Home() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div ref={mapContainerRef} className="absolute inset-0" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.18),_transparent_55%),radial-gradient(circle_at_20%_20%,_rgba(236,72,153,0.22),_transparent_50%)]" />
+      <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.18),_transparent_55%),radial-gradient(circle_at_20%_20%,_rgba(236,72,153,0.22),_transparent_50%)]" />
 
-      <main className="relative z-10 flex h-full w-full items-end justify-center px-6 pb-6 pt-20">
+      <main className="relative z-20 flex h-full w-full items-end justify-center px-6 pb-6 pt-20">
         {infoOpen ? (
           <section className="pointer-events-auto w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/20 bg-white/10 p-6 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.9)] backdrop-blur-2xl sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
