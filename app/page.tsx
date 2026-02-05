@@ -200,7 +200,7 @@ export default function Home() {
 
       <main className="relative z-20 flex h-full w-full items-end justify-center px-6 pb-6 pt-20">
         {infoOpen ? (
-          <section className="pointer-events-auto w-full max-w-5xl overflow-hidden rounded-[28px] border border-white/20 bg-white/10 p-6 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.9)] backdrop-blur-2xl sm:p-8">
+          <section className="pointer-events-auto w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-900/60 bg-slate-950/75 p-6 shadow-[0_30px_80px_-50px_rgba(2,6,23,0.95)] backdrop-blur-2xl sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.4em] text-cyan-200/80">
@@ -216,8 +216,8 @@ export default function Home() {
                   onClick={() => setFollowIss((prev) => !prev)}
                   className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.35em] transition ${
                     followIss
-                      ? "border-cyan-200/60 bg-cyan-200/20 text-cyan-50"
-                      : "border-white/20 bg-white/10 text-slate-100/80 hover:border-white/40 hover:text-white"
+                      ? "border-cyan-200/50 bg-cyan-300/15 text-cyan-50"
+                      : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
                   }`}
                 >
                   {followIss ? "Segui ISS" : "Libera mappa"}
@@ -226,7 +226,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleResetView}
-                    className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/80 transition hover:border-white/40 hover:text-white"
+                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
                   >
                     Reset vista
                   </button>
@@ -234,7 +234,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setInfoOpen(false)}
-                  className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/80 transition hover:border-white/40 hover:text-white"
+                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
                 >
                   Chiudi
                 </button>
@@ -247,20 +247,20 @@ export default function Home() {
             </p>
 
             {loading && (
-              <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 text-slate-200 shadow-[inset_0_0_35px_rgba(148,163,184,0.1)]">
+              <div className="mt-6 rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 text-slate-100 shadow-[inset_0_0_35px_rgba(2,6,23,0.45)]">
                 Fetching live telemetry…
               </div>
             )}
 
             {error && !loading && (
-              <div className="mt-6 rounded-2xl border border-rose-500/40 bg-rose-500/15 p-5 text-rose-200 shadow-[inset_0_0_35px_rgba(244,63,94,0.2)]">
+              <div className="mt-6 rounded-2xl border border-rose-500/50 bg-rose-950/60 p-5 text-rose-100 shadow-[inset_0_0_35px_rgba(59,7,19,0.6)]">
                 Unable to load ISS data: {error}
               </div>
             )}
 
             {!loading && !error && data && (
               <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[inset_0_0_40px_rgba(148,163,184,0.08)]">
+                <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
                     Latitude
                   </p>
@@ -268,7 +268,7 @@ export default function Home() {
                     {data.latitude.toFixed(4)}°
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[inset_0_0_40px_rgba(148,163,184,0.08)]">
+                <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
                     Longitude
                   </p>
@@ -276,7 +276,7 @@ export default function Home() {
                     {data.longitude.toFixed(4)}°
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[inset_0_0_40px_rgba(148,163,184,0.08)]">
+                <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
                     Altitude (km)
                   </p>
@@ -284,7 +284,7 @@ export default function Home() {
                     {data.altitude.toFixed(2)}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[inset_0_0_40px_rgba(148,163,184,0.08)]">
+                <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
                     Velocity (km/h)
                   </p>
@@ -307,8 +307,8 @@ export default function Home() {
               onClick={() => setFollowIss((prev) => !prev)}
               className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.35em] transition backdrop-blur-xl ${
                 followIss
-                  ? "border-cyan-200/60 bg-cyan-200/20 text-cyan-50"
-                  : "border-white/20 bg-white/10 text-slate-100/80 hover:border-white/40 hover:text-white"
+                  ? "border-cyan-200/50 bg-cyan-300/15 text-cyan-50"
+                  : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
               }`}
             >
               {followIss ? "Segui ISS" : "Libera mappa"}
@@ -317,7 +317,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleResetView}
-                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/80 backdrop-blur-xl transition hover:border-white/40 hover:text-white"
+                className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white"
               >
                 Reset vista
               </button>
@@ -325,7 +325,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setInfoOpen(true)}
-              className="rounded-full border border-white/20 bg-white/10 px-5 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/80 backdrop-blur-xl transition hover:border-white/40 hover:text-white"
+              className="rounded-full border border-slate-700/60 bg-slate-900/70 px-5 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white"
             >
               Apri info
             </button>
