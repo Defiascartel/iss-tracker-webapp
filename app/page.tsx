@@ -63,7 +63,10 @@ export default function Home() {
       markerRef.current.setLatLng(latlng);
     }
 
-    const trailLatLngs = trailRef.current.map(([lng, lat]) => [lat, lng]);
+    const trailLatLngs: L.LatLngTuple[] = trailRef.current.map(([lng, lat]) => [
+      lat,
+      lng,
+    ]);
 
     if (!trailLineRef.current) {
       trailLineRef.current = L.polyline(trailLatLngs, {
