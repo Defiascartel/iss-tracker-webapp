@@ -1,6 +1,5 @@
 "use client";
 
-import maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 
 type IssData = {
@@ -13,19 +12,23 @@ type IssData = {
 
 const ISS_URL = "https://api.wheretheiss.at/v1/satellites/25544";
 const REFRESH_MS = 5000;
-const MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 const TRAIL_MAX_POINTS = 200;
+const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export default function Home() {
   const [data, setData] = useState<IssData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mapError, setMapError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(true);
   const [followIss, setFollowIss] = useState(true);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
+  const trailLineRef = useRef<import("leaflet").Polyline | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const trailRef = useRef<[number, number][]>([]);
   const latestDataRef = useRef<IssData | null>(null);
   const hasCenteredRef = useRef(false);
@@ -33,46 +36,48 @@ export default function Home() {
 
   const updateMapFromData = () => {
     const map = mapRef.current;
+    const L = leafletRef.current;
     const latest = latestDataRef.current;
-    if (!map || !latest) return;
-    if (!map.isStyleLoaded()) return;
+    if (!map || !latest || !L) return;
 
     const current: [number, number] = [latest.longitude, latest.latitude];
     trailRef.current = [...trailRef.current, current].slice(-TRAIL_MAX_POINTS);
 
-    const pointSource = map.getSource("iss-point") as
-      | maplibregl.GeoJSONSource
-      | undefined;
-    const trailSource = map.getSource("iss-trail") as
-      | maplibregl.GeoJSONSource
-      | undefined;
-
-    if (pointSource) {
-      pointSource.setData({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: { type: "Point", coordinates: current },
-            properties: {},
-          },
-        ],
-      });
-    }
-
-    if (trailSource) {
-      trailSource.setData({
-        type: "Feature",
-        geometry: { type: "LineString", coordinates: trailRef.current },
-        properties: {},
-      });
-    }
+    const latlng: import("leaflet").LatLngExpression = [
+      latest.latitude,
+      latest.longitude,
+    ];
 
     if (!hasCenteredRef.current) {
-      map.jumpTo({ center: current, zoom: 2.6 });
+      map.setView(latlng, 2.6);
       hasCenteredRef.current = true;
     } else if (followRef.current) {
-      map.easeTo({ center: current, duration: 1200 });
+      map.setView(latlng, map.getZoom(), { animate: true, duration: 1.2 });
+    }
+
+    if (!markerRef.current) {
+      markerRef.current = L.circleMarker(latlng, {
+        radius: 6,
+        color: "rgba(15, 23, 42, 0.8)",
+        weight: 2,
+        fillColor: "#22d3ee",
+        fillOpacity: 0.95,
+      }).addTo(map);
+    } else {
+      markerRef.current.setLatLng(latlng);
+    }
+
+    const trailLatLngs: import("leaflet").LatLngTuple[] = trailRef.current.map(
+      ([lng, lat]) => [lat, lng]
+    );
+
+    if (!trailLineRef.current) {
+      trailLineRef.current = L.polyline(trailLatLngs, {
+        color: "rgba(14, 165, 233, 0.9)",
+        weight: 2.5,
+      }).addTo(map);
+    } else {
+      trailLineRef.current.setLatLngs(trailLatLngs);
     }
   };
 
@@ -80,7 +85,10 @@ export default function Home() {
     const map = mapRef.current;
     const latest = latestDataRef.current;
     if (!map || !latest) return;
-    map.easeTo({ center: [latest.longitude, latest.latitude], zoom: 2.6, duration: 800 });
+    map.setView([latest.latitude, latest.longitude], 2.6, {
+      animate: true,
+      duration: 0.8,
+    });
     setFollowIss(true);
   };
 
@@ -139,117 +147,49 @@ export default function Home() {
   }, [followIss]);
 
   useEffect(() => {
-    let cancelled = false;
+    let active = true;
 
     const initMap = async () => {
       if (!mapContainerRef.current || mapRef.current) return;
 
-      if (!(maplibregl as any).workerClass) {
-        const { default: MapLibreWorker } = await import(
-          "maplibre-gl/dist/maplibre-gl-csp-worker"
-        );
-        if (!cancelled) {
-          (maplibregl as any).workerClass = MapLibreWorker;
-        }
-      }
+      const leafletModule = await import("leaflet");
+      const L = (leafletModule as unknown as { default?: typeof leafletModule }).default
+        ?? leafletModule;
+      if (!active) return;
+      leafletRef.current = L;
 
-      if (!mapContainerRef.current || mapRef.current || cancelled) return;
-
-      const map = new maplibregl.Map({
-        container: mapContainerRef.current,
-        style: MAP_STYLE,
-        center: [0, 0],
-        zoom: 1.6,
+      if (!mapContainerRef.current || mapRef.current) return;
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: false,
         minZoom: 1,
         maxZoom: 12,
-        pitchWithRotate: false,
-        dragRotate: false,
-        attributionControl: false,
-      });
+      }).setView([0, 0], 1.6);
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-    map.on("dragstart", () => setFollowIss(false));
-    map.on("zoomstart", () => setFollowIss(false));
+      L.tileLayer(OSM_TILES, {
+        attribution: OSM_ATTRIBUTION,
+        maxZoom: 19,
+        crossOrigin: true,
+      }).addTo(map);
 
-      map.on("error", (event) => {
-        const message =
-          event.error instanceof Error ? event.error.message : "Map failed to load";
-        setMapError(message);
-      });
+      L.control.zoom({ position: "topright" }).addTo(map);
 
-      map.on("load", () => {
-        map.resize();
-        if (!map.getSource("iss-point")) {
-          map.addSource("iss-point", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-        });
-      }
-
-      if (!map.getSource("iss-trail")) {
-        map.addSource("iss-trail", {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: [] },
-            properties: {},
-          },
-        });
-      }
-
-      if (!map.getLayer("iss-trail-glow")) {
-        map.addLayer({
-          id: "iss-trail-glow",
-          type: "line",
-          source: "iss-trail",
-          paint: {
-            "line-color": "rgba(56, 189, 248, 0.25)",
-            "line-width": 7,
-            "line-blur": 4,
-          },
-        });
-      }
-
-      if (!map.getLayer("iss-trail")) {
-        map.addLayer({
-          id: "iss-trail",
-          type: "line",
-          source: "iss-trail",
-          paint: {
-            "line-color": "rgba(14, 165, 233, 0.9)",
-            "line-width": 2.5,
-          },
-        });
-      }
-
-      if (!map.getLayer("iss-point")) {
-        map.addLayer({
-          id: "iss-point",
-          type: "circle",
-          source: "iss-point",
-          paint: {
-            "circle-radius": 6,
-            "circle-color": "#22d3ee",
-            "circle-stroke-color": "rgba(15, 23, 42, 0.8)",
-            "circle-stroke-width": 2,
-          },
-        });
-      }
-
-      updateMapFromData();
-    });
+      map.on("dragstart", () => setFollowIss(false));
+      map.on("zoomstart", () => setFollowIss(false));
 
       mapRef.current = map;
+      updateMapFromData();
     };
 
-    initMap();
+    void initMap();
 
     return () => {
-      cancelled = true;
+      active = false;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
+      markerRef.current = null;
+      trailLineRef.current = null;
     };
   }, []);
 
@@ -315,11 +255,6 @@ export default function Home() {
             {error && !loading && (
               <div className="mt-6 rounded-2xl border border-rose-500/40 bg-rose-500/15 p-5 text-rose-200 shadow-[inset_0_0_35px_rgba(244,63,94,0.2)]">
                 Unable to load ISS data: {error}
-              </div>
-            )}
-            {mapError && (
-              <div className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-amber-100/90 shadow-[inset_0_0_35px_rgba(251,191,36,0.18)]">
-                Map error: {mapError}
               </div>
             )}
 
