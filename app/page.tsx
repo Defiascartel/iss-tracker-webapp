@@ -138,19 +138,33 @@ export default function Home() {
   }, [followIss]);
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    let cancelled = false;
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: MAP_STYLE,
-      center: [0, 0],
-      zoom: 1.6,
-      minZoom: 1,
-      maxZoom: 12,
-      pitchWithRotate: false,
-      dragRotate: false,
-      attributionControl: false,
-    });
+    const initMap = async () => {
+      if (!mapContainerRef.current || mapRef.current) return;
+
+      if (!maplibregl.workerClass) {
+        const { default: MapLibreWorker } = await import(
+          "maplibre-gl/dist/maplibre-gl-csp-worker"
+        );
+        if (!cancelled) {
+          maplibregl.workerClass = MapLibreWorker;
+        }
+      }
+
+      if (!mapContainerRef.current || mapRef.current || cancelled) return;
+
+      const map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: MAP_STYLE,
+        center: [0, 0],
+        zoom: 1.6,
+        minZoom: 1,
+        maxZoom: 12,
+        pitchWithRotate: false,
+        dragRotate: false,
+        attributionControl: false,
+      });
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.on("dragstart", () => setFollowIss(false));
@@ -217,11 +231,17 @@ export default function Home() {
       updateMapFromData();
     });
 
-    mapRef.current = map;
+      mapRef.current = map;
+    };
+
+    initMap();
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []);
 
