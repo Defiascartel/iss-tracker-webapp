@@ -24,6 +24,7 @@ const MIN_ELEVATION_DEG = 10;
 const ORBIT_LOOKAHEAD_MINUTES = 90;
 const ORBIT_STEP_SECONDS = 60;
 const EARTH_RADIUS_KM = 6371;
+const FOOTPRINT_MIN_ELEV_DEG = 20;
 
 type PassInfo = {
   start: Date;
@@ -107,7 +108,7 @@ export default function Home() {
   const trailLineRef = useRef<import("leaflet").Polyline | null>(null);
   const orbitLineRef = useRef<import("leaflet").Polyline | null>(null);
   const footprintRef = useRef<import("leaflet").Circle | null>(null);
-  const nightLayerRef = useRef<import("leaflet").Polygon | null>(null);
+  const nightLayerRef = useRef<import("leaflet").Layer | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const satrecRef = useRef<ReturnType<typeof import("satellite.js")["twoline2satrec"]> | null>(
     null
@@ -165,9 +166,10 @@ export default function Home() {
 
     if (showFootprint) {
       const altitudeKm = latest.altitude;
-      const radiusKm = Math.sqrt(
-        Math.max(0, (EARTH_RADIUS_KM + altitudeKm) ** 2 - EARTH_RADIUS_KM ** 2)
-      );
+      const elev = rad(FOOTPRINT_MIN_ELEV_DEG);
+      const ratio = EARTH_RADIUS_KM / (EARTH_RADIUS_KM + altitudeKm);
+      const psi = Math.acos(Math.min(1, Math.max(-1, ratio * Math.cos(elev)))) - elev;
+      const radiusKm = Math.max(0, EARTH_RADIUS_KM * psi);
       const radiusMeters = radiusKm * 1000;
       if (!footprintRef.current) {
         footprintRef.current = L.circle(latlng, {
@@ -531,23 +533,30 @@ export default function Home() {
           [90, 180],
           [90, -180],
         ];
-        const polygonLatLngs = [world, dayBoundary];
+        const shifts = [-360, 0, 360];
+        const multipolygon = shifts.map((shift) => {
+          const shiftedDay = dayBoundary.map(([lat, lon]) => [lat, lon + shift]);
+          const shiftedWorld = world.map(([lat, lon]) => [lat, lon + shift]);
+          return [shiftedWorld, shiftedDay];
+        });
+
         if (!nightLayerRef.current) {
-          nightLayerRef.current = L.polygon(polygonLatLngs, {
+          nightLayerRef.current = L.polygon(multipolygon as any, {
             stroke: false,
             fillColor: "rgba(2, 6, 23, 0.55)",
             fillOpacity: 0.55,
             interactive: false,
           }).addTo(currentMap);
         } else {
-          nightLayerRef.current.setLatLngs(
-            polygonLatLngs as unknown as import("leaflet").LatLngExpression[][]
+          (nightLayerRef.current as import("leaflet").Polygon).setLatLngs(
+            multipolygon as any
           );
         }
       };
 
       updateNightLayer();
       nightInterval = setInterval(updateNightLayer, 5 * 60 * 1000);
+      map.on("moveend zoomend", updateNightLayer);
       updateMapFromData();
     };
 
@@ -588,7 +597,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setFollowIss((prev) => !prev)}
-                  className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
+                  className={`rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] transition sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em] ${
                     followIss
                       ? "border-cyan-200/50 bg-cyan-300/15 text-cyan-50"
                       : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
@@ -599,7 +608,8 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowFootprint((prev) => !prev)}
-                  className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
+                  title={`Area visibile con elevazione ≥ ${FOOTPRINT_MIN_ELEV_DEG}°`}
+                  className={`rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] transition sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em] ${
                     showFootprint
                       ? "border-emerald-200/50 bg-emerald-300/15 text-emerald-50"
                       : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
@@ -611,7 +621,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleResetView}
-                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
+                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em]"
                   >
                     Reset vista
                   </button>
@@ -619,7 +629,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setInfoOpen(false)}
-                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
+                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em]"
                 >
                   Chiudi
                 </button>
@@ -688,7 +698,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleUseLocation}
-                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:tracking-[0.3em]"
+                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:tracking-[0.3em]"
                 >
                   Usa posizione
                 </button>
@@ -699,7 +709,7 @@ export default function Home() {
                     placeholder="Lat"
                     value={manualLat}
                     onChange={(event) => setManualLat(event.target.value)}
-                    className="w-20 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-100/90 outline-none transition focus:border-cyan-300/70 sm:w-24 sm:py-2 sm:text-xs"
+                    className="w-20 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1 text-[10px] text-slate-100/90 outline-none transition focus:border-cyan-300/70 sm:w-24 sm:py-1.5 sm:text-[11px] lg:py-2 lg:text-xs"
                   />
                   <input
                     type="number"
@@ -707,12 +717,12 @@ export default function Home() {
                     placeholder="Lon"
                     value={manualLon}
                     onChange={(event) => setManualLon(event.target.value)}
-                    className="w-20 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-100/90 outline-none transition focus:border-cyan-300/70 sm:w-24 sm:py-2 sm:text-xs"
+                    className="w-20 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1 text-[10px] text-slate-100/90 outline-none transition focus:border-cyan-300/70 sm:w-24 sm:py-1.5 sm:text-[11px] lg:py-2 lg:text-xs"
                   />
                   <button
                     type="button"
                     onClick={handleManualLocation}
-                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:tracking-[0.3em]"
+                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:tracking-[0.3em]"
                   >
                     Calcola
                   </button>
@@ -780,7 +790,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setFollowIss((prev) => !prev)}
-              className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition backdrop-blur-xl sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
+              className={`rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] transition backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em] ${
                 followIss
                   ? "border-cyan-200/50 bg-cyan-300/15 text-cyan-50"
                   : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
@@ -791,7 +801,8 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setShowFootprint((prev) => !prev)}
-              className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition backdrop-blur-xl sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
+              title={`Area visibile con elevazione ≥ ${FOOTPRINT_MIN_ELEV_DEG}°`}
+              className={`rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] transition backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em] ${
                 showFootprint
                   ? "border-emerald-200/50 bg-emerald-300/15 text-emerald-50"
                   : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
@@ -803,7 +814,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleResetView}
-                className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
+                className="rounded-full border border-slate-700/60 bg-slate-900/70 px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-4 lg:py-2 lg:text-xs lg:tracking-[0.35em]"
               >
                 Reset vista
               </button>
@@ -811,7 +822,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setInfoOpen(true)}
-              className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white sm:px-5 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
+              className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1 text-[9px] uppercase tracking-[0.2em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-1.5 sm:text-[10px] sm:tracking-[0.25em] lg:px-5 lg:py-2 lg:text-xs lg:tracking-[0.35em]"
             >
               Apri info
             </button>
