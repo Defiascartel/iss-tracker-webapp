@@ -463,7 +463,7 @@ export default function Home() {
 
         if (!orbitLineRef.current) {
           orbitLineRef.current = L.polyline(segments, {
-            color: "rgba(34, 197, 94, 0.9)",
+            color: "rgba(250, 204, 21, 0.95)",
             weight: 2,
             dashArray: "6 6",
           }).addTo(map);
