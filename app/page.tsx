@@ -402,6 +402,7 @@ export default function Home() {
 
         const now = Date.now();
         const points: import("leaflet").LatLngTuple[] = [];
+        const segments: import("leaflet").LatLngTuple[][] = [];
         for (
           let t = now;
           t <= now + ORBIT_LOOKAHEAD_MINUTES * 60 * 1000;
@@ -415,18 +416,27 @@ export default function Home() {
           const geodetic = satelliteModule.eciToGeodetic(positionEci, gmst);
           const lat = deg(geodetic.latitude);
           const lon = normalizeLon(deg(geodetic.longitude));
+          if (points.length > 0) {
+            const prevLon = points[points.length - 1][1];
+            if (Math.abs(lon - prevLon) > 180) {
+              segments.push([...points]);
+              points.length = 0;
+            }
+          }
           points.push([lat, lon]);
         }
 
         if (!active || points.length === 0) return;
+        if (points.length > 0) segments.push(points);
+
         if (!orbitLineRef.current) {
-          orbitLineRef.current = L.polyline(points, {
+          orbitLineRef.current = L.polyline(segments, {
             color: "rgba(34, 197, 94, 0.9)",
             weight: 2,
             dashArray: "6 6",
           }).addTo(map);
         } else {
-          orbitLineRef.current.setLatLngs(points);
+          orbitLineRef.current.setLatLngs(segments);
         }
       } catch (err) {
         if (!active) return;
@@ -460,17 +470,19 @@ export default function Home() {
       leafletRef.current = L;
 
       if (!mapContainerRef.current || mapRef.current) return;
-      const map = L.map(mapContainerRef.current, {
-        zoomControl: false,
-        minZoom: 1,
-        maxZoom: 12,
-      }).setView([0, 0], 1.6);
+    const map = L.map(mapContainerRef.current, {
+      zoomControl: false,
+      minZoom: 1,
+      maxZoom: 12,
+      worldCopyJump: true,
+    }).setView([0, 0], 1.6);
 
-      L.tileLayer(OSM_TILES, {
-        attribution: OSM_ATTRIBUTION,
-        maxZoom: 19,
-        crossOrigin: true,
-      }).addTo(map);
+    L.tileLayer(OSM_TILES, {
+      attribution: OSM_ATTRIBUTION,
+      maxZoom: 19,
+      crossOrigin: true,
+      noWrap: false,
+    }).addTo(map);
 
       L.control.zoom({ position: "topright" }).addTo(map);
 
@@ -546,7 +558,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setFollowIss((prev) => !prev)}
-                  className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.35em] transition ${
+                  className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
                     followIss
                       ? "border-cyan-200/50 bg-cyan-300/15 text-cyan-50"
                       : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
@@ -558,7 +570,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleResetView}
-                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
+                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
                   >
                     Reset vista
                   </button>
@@ -566,7 +578,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setInfoOpen(false)}
-                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
+                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
                 >
                   Chiudi
                 </button>
@@ -635,7 +647,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleUseLocation}
-                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
+                  className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:tracking-[0.3em]"
                 >
                   Usa posizione
                 </button>
@@ -646,7 +658,7 @@ export default function Home() {
                     placeholder="Lat"
                     value={manualLat}
                     onChange={(event) => setManualLat(event.target.value)}
-                    className="w-24 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-100/90 outline-none transition focus:border-cyan-300/70"
+                    className="w-20 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-100/90 outline-none transition focus:border-cyan-300/70 sm:w-24 sm:py-2 sm:text-xs"
                   />
                   <input
                     type="number"
@@ -654,12 +666,12 @@ export default function Home() {
                     placeholder="Lon"
                     value={manualLon}
                     onChange={(event) => setManualLon(event.target.value)}
-                    className="w-24 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-100/90 outline-none transition focus:border-cyan-300/70"
+                    className="w-20 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-100/90 outline-none transition focus:border-cyan-300/70 sm:w-24 sm:py-2 sm:text-xs"
                   />
                   <button
                     type="button"
                     onClick={handleManualLocation}
-                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white"
+                    className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:tracking-[0.3em]"
                   >
                     Calcola
                   </button>
@@ -727,7 +739,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setFollowIss((prev) => !prev)}
-              className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.35em] transition backdrop-blur-xl ${
+              className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition backdrop-blur-xl sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
                 followIss
                   ? "border-cyan-200/50 bg-cyan-300/15 text-cyan-50"
                   : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
@@ -739,7 +751,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleResetView}
-                className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white"
+                className="rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
               >
                 Reset vista
               </button>
@@ -747,7 +759,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setInfoOpen(true)}
-              className="rounded-full border border-slate-700/60 bg-slate-900/70 px-5 py-2 text-xs uppercase tracking-[0.35em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white"
+              className="rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-1.5 text-[10px] uppercase tracking-[0.25em] text-slate-100/90 backdrop-blur-xl transition hover:border-slate-500/80 hover:text-white sm:px-5 sm:py-2 sm:text-xs sm:tracking-[0.35em]"
             >
               Apri info
             </button>
