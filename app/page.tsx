@@ -23,6 +23,7 @@ const PASS_STEP_SECONDS = 60;
 const MIN_ELEVATION_DEG = 10;
 const ORBIT_LOOKAHEAD_MINUTES = 90;
 const ORBIT_STEP_SECONDS = 60;
+const EARTH_RADIUS_KM = 6371;
 
 type PassInfo = {
   start: Date;
@@ -88,6 +89,7 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(true);
   const [followIss, setFollowIss] = useState(true);
+  const [showFootprint, setShowFootprint] = useState(false);
   const [tle, setTle] = useState<[string, string] | null>(null);
   const [tleError, setTleError] = useState<string | null>(null);
   const [passes, setPasses] = useState<PassInfo[] | null>(null);
@@ -104,6 +106,7 @@ export default function Home() {
   const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
   const trailLineRef = useRef<import("leaflet").Polyline | null>(null);
   const orbitLineRef = useRef<import("leaflet").Polyline | null>(null);
+  const footprintRef = useRef<import("leaflet").Circle | null>(null);
   const nightLayerRef = useRef<import("leaflet").Polygon | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const satrecRef = useRef<ReturnType<typeof import("satellite.js")["twoline2satrec"]> | null>(
@@ -158,6 +161,29 @@ export default function Home() {
       }).addTo(map);
     } else {
       trailLineRef.current.setLatLngs(trailLatLngs);
+    }
+
+    if (showFootprint) {
+      const altitudeKm = latest.altitude;
+      const radiusKm = Math.sqrt(
+        Math.max(0, (EARTH_RADIUS_KM + altitudeKm) ** 2 - EARTH_RADIUS_KM ** 2)
+      );
+      const radiusMeters = radiusKm * 1000;
+      if (!footprintRef.current) {
+        footprintRef.current = L.circle(latlng, {
+          radius: radiusMeters,
+          color: "rgba(148, 163, 184, 0.65)",
+          weight: 1,
+          fillColor: "rgba(15, 23, 42, 0.25)",
+          fillOpacity: 0.25,
+        }).addTo(map);
+      } else {
+        footprintRef.current.setLatLng(latlng);
+        footprintRef.current.setRadius(radiusMeters);
+      }
+    } else if (footprintRef.current) {
+      footprintRef.current.remove();
+      footprintRef.current = null;
     }
   };
 
@@ -307,6 +333,10 @@ export default function Home() {
   useEffect(() => {
     followRef.current = followIss;
   }, [followIss]);
+
+  useEffect(() => {
+    updateMapFromData();
+  }, [showFootprint]);
 
   useEffect(() => {
     if (!passLocation || !tle) return;
@@ -544,13 +574,13 @@ export default function Home() {
 
       <main className="pointer-events-none relative z-20 flex h-full w-full items-end justify-center px-6 pb-6 pt-20">
         {infoOpen ? (
-          <section className="pointer-events-auto w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-900/60 bg-slate-950/75 p-6 shadow-[0_30px_80px_-50px_rgba(2,6,23,0.95)] backdrop-blur-2xl sm:p-8">
+          <section className="pointer-events-auto w-full max-w-4xl overflow-hidden rounded-[24px] border border-slate-900/60 bg-slate-950/80 p-5 shadow-[0_30px_80px_-50px_rgba(2,6,23,0.95)] backdrop-blur-2xl sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.4em] text-cyan-200/80">
                   International Space Station
                 </p>
-                <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
+                <h1 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
                   Live ISS Tracker
                 </h1>
               </div>
@@ -565,6 +595,17 @@ export default function Home() {
                   }`}
                 >
                   {followIss ? "Segui ISS" : "Libera mappa"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowFootprint((prev) => !prev)}
+                  className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
+                    showFootprint
+                      ? "border-emerald-200/50 bg-emerald-300/15 text-emerald-50"
+                      : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
+                  }`}
+                >
+                  {showFootprint ? "Footprint on" : "Footprint off"}
                 </button>
                 {!followIss && (
                   <button
@@ -585,7 +626,7 @@ export default function Home() {
               </div>
             </div>
 
-            <p className="mt-4 text-sm text-slate-200/80">
+            <p className="mt-3 text-xs text-slate-200/80">
               Aggiornamenti ogni 5 secondi. La traiettoria mostra gli ultimi punti
               ricevuti.
             </p>
@@ -603,7 +644,7 @@ export default function Home() {
             )}
 
             {!loading && !error && data && (
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
                     Latitude
@@ -639,11 +680,11 @@ export default function Home() {
               </div>
             )}
 
-            <div className="mt-6 rounded-2xl border border-slate-800/70 bg-slate-950/70 p-5 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
+            <div className="mt-5 rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 shadow-[inset_0_0_40px_rgba(2,6,23,0.45)]">
               <p className="text-[10px] uppercase tracking-[0.35em] text-slate-300/80">
                 Prossimi passaggi ISS
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleUseLocation}
@@ -679,27 +720,27 @@ export default function Home() {
               </div>
 
               {locationLabel && (
-                <p className="mt-3 text-xs text-slate-300/80">
+                <p className="mt-2 text-[11px] text-slate-300/80">
                   Posizione: {locationLabel}
                 </p>
               )}
               {tleError && (
-                <p className="mt-3 text-xs text-rose-200">
+                <p className="mt-2 text-[11px] text-rose-200">
                   TLE error: {tleError}
                 </p>
               )}
               {passError && (
-                <p className="mt-3 text-xs text-rose-200">
+                <p className="mt-2 text-[11px] text-rose-200">
                   {passError}
                 </p>
               )}
               {passLoading && (
-                <p className="mt-3 text-xs text-slate-300/80">
+                <p className="mt-2 text-[11px] text-slate-300/80">
                   Calcolo passaggi in corso…
                 </p>
               )}
               {!passLoading && passes && passes.length > 0 && (
-                <ul className="mt-3 space-y-2 text-xs text-slate-200">
+                <ul className="mt-2 space-y-1.5 text-[11px] text-slate-200">
                   {passes.map((pass) => (
                     <li key={pass.start.toISOString()} className="flex flex-wrap gap-2">
                       <span>
@@ -717,13 +758,13 @@ export default function Home() {
                 </ul>
               )}
               {!passLoading && passes && passes.length === 0 && (
-                <p className="mt-3 text-xs text-slate-300/80">
+                <p className="mt-2 text-[11px] text-slate-300/80">
                   Nessun passaggio sopra {MIN_ELEVATION_DEG}° nelle prossime{" "}
                   {PASS_LOOKAHEAD_HOURS} ore.
                 </p>
               )}
               {!passLoading && !passes && (
-                <p className="mt-3 text-xs text-slate-300/60">
+                <p className="mt-2 text-[11px] text-slate-300/60">
                   Seleziona una posizione per calcolare i passaggi.
                 </p>
               )}
@@ -746,6 +787,17 @@ export default function Home() {
               }`}
             >
               {followIss ? "Segui ISS" : "Libera mappa"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFootprint((prev) => !prev)}
+              className={`rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] transition backdrop-blur-xl sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.35em] ${
+                showFootprint
+                  ? "border-emerald-200/50 bg-emerald-300/15 text-emerald-50"
+                  : "border-slate-700/60 bg-slate-900/70 text-slate-100/90 hover:border-slate-500/80 hover:text-white"
+              }`}
+            >
+              {showFootprint ? "Footprint on" : "Footprint off"}
             </button>
             {!followIss && (
               <button
